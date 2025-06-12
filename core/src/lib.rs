@@ -15,8 +15,7 @@ mod tests {
         let mut rng = OsRng;
 
         // 1. 生成自定义的密钥结构体
-        let (pub_key_struct, priv_key_struct) =
-            traditional::generate_keypair(&mut rng).unwrap();
+        let (pub_key_struct, priv_key_struct) = traditional::generate_keypair(&mut rng).unwrap();
 
         // 2. 从结构体重建 RSA 库所需的密钥对象
         let rsa_pub_key = RsaPublicKey::new(
@@ -53,7 +52,8 @@ mod tests {
         let (pub_key, priv_key) = post_quantum::generate_keypair();
 
         // 2. 加密和解密
-        let encrypted = post_quantum::encrypt(test_input.as_ref(), &pub_key, None, &mut rng).unwrap();
+        let encrypted =
+            post_quantum::encrypt(test_input.as_ref(), &pub_key, None, &mut rng).unwrap();
         let decrypted = post_quantum::decrypt(&encrypted, &priv_key, None).unwrap();
 
         // 3. 验证结果

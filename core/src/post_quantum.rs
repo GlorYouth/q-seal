@@ -1,9 +1,11 @@
-use aes_gcm::aead::{Aead, KeyInit, Payload};
 use aes_gcm::Aes256Gcm;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use aes_gcm::aead::{Aead, KeyInit, Payload};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use hkdf::Hkdf;
 use pqcrypto_kyber::*;
-use pqcrypto_traits::kem::{Ciphertext, PublicKey as PqPublicKey, SecretKey as PqSecretKey, SharedSecret};
+use pqcrypto_traits::kem::{
+    Ciphertext, PublicKey as PqPublicKey, SecretKey as PqSecretKey, SharedSecret,
+};
 use rand::{CryptoRng, RngCore};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -47,9 +49,21 @@ impl StdError for Error {
     }
 }
 
-impl From<base64::DecodeError> for Error { fn from(e: base64::DecodeError) -> Self { Error::Base64(e) } }
-impl From<std::string::FromUtf8Error> for Error { fn from(e: std::string::FromUtf8Error) -> Self { Error::Utf8(e) } }
-impl From<aes_gcm::Error> for Error { fn from(e: aes_gcm::Error) -> Self { Error::Aes(e) } }
+impl From<base64::DecodeError> for Error {
+    fn from(e: base64::DecodeError) -> Self {
+        Error::Base64(e)
+    }
+}
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        Error::Utf8(e)
+    }
+}
+impl From<aes_gcm::Error> for Error {
+    fn from(e: aes_gcm::Error) -> Self {
+        Error::Aes(e)
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq, Debug)]
 pub struct PublicKey {
@@ -112,10 +126,11 @@ where
 
     let mut salt = [0u8; SALT_LEN];
     rng.fill_bytes(&mut salt);
-    
+
     let hkdf = Hkdf::<Sha256>::new(Some(&salt), shared_secret.as_bytes());
     let mut okm = [0u8; 32];
-    hkdf.expand(&[], &mut okm).expect("32 bytes is a valid length for HKDF");
+    hkdf.expand(&[], &mut okm)
+        .expect("32 bytes is a valid length for HKDF");
     let key = okm.into();
 
     let cipher = Aes256Gcm::new(&key);
@@ -128,7 +143,8 @@ where
         aad: associated_data.unwrap_or(&[]),
     };
 
-    let encrypted_message = cipher.encrypt(&nonce, payload)
+    let encrypted_message = cipher
+        .encrypt(&nonce, payload)
         .map_err(|_| Error::Aes(aes_gcm::Error))?;
 
     let mut result = Vec::new();
@@ -164,14 +180,16 @@ pub fn decrypt(
         .map_err(|_| Error::InvalidData("无效的密文数据"))?;
 
     let shared_secret = kyber768::decapsulate(&ct, &sk);
-    
+
     let hkdf = Hkdf::<Sha256>::new(Some(salt), shared_secret.as_bytes());
     let mut okm = [0u8; 32];
-    hkdf.expand(&[], &mut okm).expect("32 bytes is a valid length for HKDF");
+    hkdf.expand(&[], &mut okm)
+        .expect("32 bytes is a valid length for HKDF");
     let key = okm.into();
 
     let cipher = Aes256Gcm::new(&key);
-    let nonce_array: [u8; NONCE_LEN] = nonce_data.try_into()
+    let nonce_array: [u8; NONCE_LEN] = nonce_data
+        .try_into()
         .map_err(|_| Error::InvalidData("Nonce 长度无效"))?;
     let nonce = nonce_array.into();
 
@@ -180,7 +198,8 @@ pub fn decrypt(
         aad: associated_data.unwrap_or(&[]),
     };
 
-    let decrypted_message = cipher.decrypt(&nonce, payload)
+    let decrypted_message = cipher
+        .decrypt(&nonce, payload)
         .map_err(|_| Error::Aes(aes_gcm::Error))?;
 
     String::from_utf8(decrypted_message).map_err(Error::from)
@@ -189,7 +208,7 @@ pub fn decrypt(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::{rng};
+    use rand::rng;
 
     #[test]
     fn test_encrypt_decrypt_happy_path() {
@@ -201,17 +220,17 @@ mod tests {
 
         assert_eq!(test_input, decrypted);
     }
-    
+
     #[test]
     fn test_key_serialization() {
         let (pub_key, priv_key) = generate_keypair();
-        
+
         let pub_b64 = pub_key.to_base64();
         let priv_b64 = priv_key.to_base64();
-        
+
         let restored_pub = PublicKey::from_base64(&pub_b64).unwrap();
         let restored_priv = PrivateKey::from_base64(&priv_b64).unwrap();
-        
+
         assert_eq!(pub_key, restored_pub);
         assert_eq!(priv_key, restored_priv);
     }
@@ -221,10 +240,10 @@ mod tests {
         let test_input = "This message should not be decryptable.";
         let (pub_key, _) = generate_keypair();
         let (_, wrong_priv_key) = generate_keypair();
-        
+
         let encrypted = encrypt(test_input.as_bytes(), &pub_key, None, &mut rng()).unwrap();
         let result = decrypt(&encrypted, &wrong_priv_key, None);
-        
+
         assert!(result.is_err());
     }
 
@@ -232,17 +251,17 @@ mod tests {
     fn test_tampered_ciphertext_fails_decryption() {
         let test_input = "Another message";
         let (pub_key, priv_key) = generate_keypair();
-        
+
         let encrypted_b64 = encrypt(test_input.as_bytes(), &pub_key, None, &mut rng()).unwrap();
         let mut encrypted_data = BASE64.decode(&encrypted_b64).unwrap();
-        
+
         // Flip a bit in the ciphertext part
         let last_byte_index = encrypted_data.len() - 1;
-        encrypted_data[last_byte_index] ^= 0x01; 
-        
+        encrypted_data[last_byte_index] ^= 0x01;
+
         let tampered_encrypted_b64 = BASE64.encode(&encrypted_data);
-        
+
         let result = decrypt(&tampered_encrypted_b64, &priv_key, None);
         assert!(result.is_err());
     }
-} 
+}

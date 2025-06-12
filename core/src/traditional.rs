@@ -1,14 +1,14 @@
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
-use rsa::{RsaPrivateKey, RsaPublicKey};
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
 use rsa::oaep::Oaep;
 #[allow(unused_imports)]
-use rsa::rand_core::{OsRng, RngCore, CryptoRngCore};
-use sha2::Sha256;
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::error::Error as StdError;
+use rsa::rand_core::{CryptoRngCore, OsRng, RngCore};
 use rsa::traits::{PrivateKeyParts, PublicKeyParts};
+use rsa::{RsaPrivateKey, RsaPublicKey};
+use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use std::convert::TryFrom;
+use std::error::Error as StdError;
+use std::fmt;
 
 const BITS: usize = 2048;
 
@@ -39,10 +39,21 @@ impl StdError for Error {
     }
 }
 
-impl From<rsa::Error> for Error { fn from(e: rsa::Error) -> Self { Error::Rsa(e) } }
-impl From<base64::DecodeError> for Error { fn from(e: base64::DecodeError) -> Self { Error::Base64(e) } }
-impl From<std::string::FromUtf8Error> for Error { fn from(e: std::string::FromUtf8Error) -> Self { Error::Utf8(e) } }
-
+impl From<rsa::Error> for Error {
+    fn from(e: rsa::Error) -> Self {
+        Error::Rsa(e)
+    }
+}
+impl From<base64::DecodeError> for Error {
+    fn from(e: base64::DecodeError) -> Self {
+        Error::Base64(e)
+    }
+}
+impl From<std::string::FromUtf8Error> for Error {
+    fn from(e: std::string::FromUtf8Error) -> Self {
+        Error::Utf8(e)
+    }
+}
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct PublicKey {
@@ -91,7 +102,7 @@ impl TryFrom<&PrivateKey> for RsaPrivateKey {
         let d = rsa::BigUint::from_bytes_be(&pk_struct.d);
         let p = rsa::BigUint::from_bytes_be(&pk_struct.p);
         let q = rsa::BigUint::from_bytes_be(&pk_struct.q);
-        
+
         RsaPrivateKey::from_components(n, e, d, vec![p, q])
     }
 }
@@ -105,11 +116,7 @@ where
     Ok((PublicKey::from(&pub_key), PrivateKey::from(&priv_key)))
 }
 
-pub fn encrypt<R>(
-    input: &[u8],
-    public_key: &RsaPublicKey,
-    rng: &mut R
-) -> Result<String, Error>
+pub fn encrypt<R>(input: &[u8], public_key: &RsaPublicKey, rng: &mut R) -> Result<String, Error>
 where
     R: RngCore + CryptoRngCore,
 {
@@ -143,23 +150,25 @@ mod tests {
         // Reconstruct keys from components
         let rsa_pub_key = RsaPublicKey::new(
             rsa::BigUint::from_bytes_be(&pub_key_struct.n),
-            rsa::BigUint::from_bytes_be(&pub_key_struct.e)
-        ).unwrap();
-        
+            rsa::BigUint::from_bytes_be(&pub_key_struct.e),
+        )
+        .unwrap();
+
         let rsa_priv_key = RsaPrivateKey::from_components(
             rsa_pub_key.n().clone(),
             rsa_pub_key.e().clone(),
             rsa::BigUint::from_bytes_be(&priv_key_struct.d),
             vec![
                 rsa::BigUint::from_bytes_be(&priv_key_struct.p),
-                rsa::BigUint::from_bytes_be(&priv_key_struct.q)
+                rsa::BigUint::from_bytes_be(&priv_key_struct.q),
             ],
-        ).unwrap();
+        )
+        .unwrap();
 
         let test_input = "Hello, world!";
         let encrypted = encrypt(test_input.as_bytes(), &rsa_pub_key, &mut rng).unwrap();
         let decrypted = decrypt(&encrypted, &rsa_priv_key).unwrap();
-        
+
         assert_eq!(test_input, decrypted);
     }
 
@@ -168,11 +177,12 @@ mod tests {
         let mut rng = OsRng;
         let (pub_key_struct, _) = generate_keypair(&mut rng).unwrap();
         let (wrong_pub_key_struct, wrong_priv_key_struct) = generate_keypair(&mut rng).unwrap();
-        
+
         let rsa_pub_key = RsaPublicKey::new(
             rsa::BigUint::from_bytes_be(&pub_key_struct.n),
-            rsa::BigUint::from_bytes_be(&pub_key_struct.e)
-        ).unwrap();
+            rsa::BigUint::from_bytes_be(&pub_key_struct.e),
+        )
+        .unwrap();
 
         let wrong_rsa_priv_key = RsaPrivateKey::from_components(
             rsa::BigUint::from_bytes_be(&wrong_pub_key_struct.n),
@@ -180,14 +190,15 @@ mod tests {
             rsa::BigUint::from_bytes_be(&wrong_priv_key_struct.d),
             vec![
                 rsa::BigUint::from_bytes_be(&wrong_priv_key_struct.p),
-                rsa::BigUint::from_bytes_be(&wrong_priv_key_struct.q)
+                rsa::BigUint::from_bytes_be(&wrong_priv_key_struct.q),
             ],
-        ).unwrap();
+        )
+        .unwrap();
 
         let test_input = "This should not be decryptable";
         let encrypted = encrypt(test_input.as_bytes(), &rsa_pub_key, &mut rng).unwrap();
         let result = decrypt(&encrypted, &wrong_rsa_priv_key);
-        
+
         assert!(result.is_err());
     }
-} 
+}

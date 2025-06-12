@@ -28,7 +28,7 @@ pub enum AppError {
 
     #[error("密码不匹配")]
     PasswordMismatch,
-    
+
     #[error("无效的输入: {0}")]
     InvalidInput(String),
 }
@@ -43,4 +43,4 @@ impl From<rsa::Error> for AppError {
     fn from(err: rsa::Error) -> Self {
         AppError::SecureKey(format!("RSA 操作失败: {}", err))
     }
-} 
+}
