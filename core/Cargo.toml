@@ -1,0 +1,33 @@
+[package]
+name = "q-seal-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rand = "0.9.1"
+base64 = "0.22.1"
+pqcrypto = "0.18.1"
+pqcrypto-kyber = "0.8.1"
+pqcrypto-traits = "0.3.5"
+serde = { version = "1.0.219", features = ["derive"] }
+aes-gcm = "0.10.3"
+hkdf = "0.12.4"
+sha2 = "0.10.8"
+rsa = "0.9.8"
+rand_core = "0.9.3"
+clap = { version = "4.5.4", features = ["derive"] }
+clap_complete = "4.5.1"
+serde_json = "1.0"
+argon2 = "0.5.3"
+secrecy = "0.10.3"
+rpassword = "7.4.0"
+chrono = "0.4"
+thiserror = "2.0.12"
+zeroize = "1.8.1"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
