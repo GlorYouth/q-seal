@@ -201,4 +201,4 @@ cargo test
 
 ## 许可
 
-本项目当前未包含 LICENSE 文件，请根据需要选择并添加合适的开源许可证。 
+MPL LICENSE 2.0
