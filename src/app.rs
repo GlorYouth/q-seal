@@ -75,7 +75,7 @@ fn handle_traditional(action: Action) -> AppResult<()> {
                 "JSON",
                 TRADITIONAL_DEFAULT_KEY_FILE,
                 TRADITIONAL_DEFAULT_DATA_FILE,
-                "RSA-4096",
+                "RSA-2048",
                 "--- 传统 RSA 加密 ---",
             )
         }
@@ -128,7 +128,7 @@ fn handle_post_quantum(action: Action) -> AppResult<()> {
                 "Base64",
                 POST_QUANTUM_DEFAULT_KEY_FILE,
                 POST_QUANTUM_DEFAULT_DATA_FILE,
-                "Kyber-1024",
+                "Kyber-768",
                 "--- 后量子 Kyber 加密 ---",
             )
         }
