@@ -1,5 +1,6 @@
 pub mod traditional;
 pub mod post_quantum;
+pub mod secure_key;
 
 #[cfg(test)]
 mod tests {
