@@ -1,6 +1,7 @@
-pub mod traditional;
+pub mod error;
 pub mod post_quantum;
 pub mod secure_key;
+pub mod traditional;
 
 #[cfg(test)]
 mod tests {
@@ -36,7 +37,7 @@ mod tests {
         .unwrap();
 
         // 3. 加密和解密
-        let encrypted = traditional::encrypt(test_input, &rsa_pub_key, &mut rng).unwrap();
+        let encrypted = traditional::encrypt(test_input.as_ref(), &rsa_pub_key, &mut rng).unwrap();
         let decrypted = traditional::decrypt(&encrypted, &rsa_priv_key).unwrap();
 
         // 4. 验证结果
@@ -52,7 +53,7 @@ mod tests {
         let (pub_key, priv_key) = post_quantum::generate_keypair();
 
         // 2. 加密和解密
-        let encrypted = post_quantum::encrypt(test_input, &pub_key, None, &mut rng).unwrap();
+        let encrypted = post_quantum::encrypt(test_input.as_ref(), &pub_key, None, &mut rng).unwrap();
         let decrypted = post_quantum::decrypt(&encrypted, &priv_key, None).unwrap();
 
         // 3. 验证结果

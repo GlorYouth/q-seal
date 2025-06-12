@@ -97,7 +97,7 @@ pub fn generate_keypair() -> (PublicKey, PrivateKey) {
 
 /// 使用Kyber公钥和AES-GCM加密字符串
 pub fn encrypt<R>(
-    input: &str,
+    input: &[u8],
     public_key: &PublicKey,
     associated_data: Option<&[u8]>,
     rng: &mut R,
@@ -124,7 +124,7 @@ where
     let nonce = nonce_data.into();
 
     let payload = Payload {
-        msg: input.as_bytes(),
+        msg: input,
         aad: associated_data.unwrap_or(&[]),
     };
 
@@ -196,7 +196,7 @@ mod tests {
         let test_input = "Hello, quantum world! This is a longer message to test encryption.";
         let (pub_key, priv_key) = generate_keypair();
 
-        let encrypted = encrypt(test_input, &pub_key, None, &mut rng()).unwrap();
+        let encrypted = encrypt(test_input.as_bytes(), &pub_key, None, &mut rng()).unwrap();
         let decrypted = decrypt(&encrypted, &priv_key, None).unwrap();
 
         assert_eq!(test_input, decrypted);
@@ -222,7 +222,7 @@ mod tests {
         let (pub_key, _) = generate_keypair();
         let (_, wrong_priv_key) = generate_keypair();
         
-        let encrypted = encrypt(test_input, &pub_key, None, &mut rng()).unwrap();
+        let encrypted = encrypt(test_input.as_bytes(), &pub_key, None, &mut rng()).unwrap();
         let result = decrypt(&encrypted, &wrong_priv_key, None);
         
         assert!(result.is_err());
@@ -233,7 +233,7 @@ mod tests {
         let test_input = "Another message";
         let (pub_key, priv_key) = generate_keypair();
         
-        let encrypted_b64 = encrypt(test_input, &pub_key, None, &mut rng()).unwrap();
+        let encrypted_b64 = encrypt(test_input.as_bytes(), &pub_key, None, &mut rng()).unwrap();
         let mut encrypted_data = BASE64.decode(&encrypted_b64).unwrap();
         
         // Flip a bit in the ciphertext part

@@ -106,7 +106,7 @@ where
 }
 
 pub fn encrypt<R>(
-    input: &str,
+    input: &[u8],
     public_key: &RsaPublicKey,
     rng: &mut R
 ) -> Result<String, Error>
@@ -114,7 +114,7 @@ where
     R: RngCore + CryptoRngCore,
 {
     let padding = Oaep::new::<Sha256>();
-    let encrypted = public_key.encrypt(rng, padding, input.as_bytes())?;
+    let encrypted = public_key.encrypt(rng, padding, input)?;
     Ok(BASE64.encode(&encrypted))
 }
 
@@ -157,7 +157,7 @@ mod tests {
         ).unwrap();
 
         let test_input = "Hello, world!";
-        let encrypted = encrypt(test_input, &rsa_pub_key, &mut rng).unwrap();
+        let encrypted = encrypt(test_input.as_bytes(), &rsa_pub_key, &mut rng).unwrap();
         let decrypted = decrypt(&encrypted, &rsa_priv_key).unwrap();
         
         assert_eq!(test_input, decrypted);
@@ -185,7 +185,7 @@ mod tests {
         ).unwrap();
 
         let test_input = "This should not be decryptable";
-        let encrypted = encrypt(test_input, &rsa_pub_key, &mut rng).unwrap();
+        let encrypted = encrypt(test_input.as_bytes(), &rsa_pub_key, &mut rng).unwrap();
         let result = decrypt(&encrypted, &wrong_rsa_priv_key);
         
         assert!(result.is_err());
