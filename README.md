@@ -35,7 +35,7 @@
 克隆仓库并编译发布版：
 
 ```bash
-git clone https://github.com/your_username/q-seal.git
+git clone https://github.com/GlorYouth/q-seal.git
 cd q-seal
 cargo build --release
 ```
