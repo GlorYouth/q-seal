@@ -146,6 +146,8 @@ jobs:
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 修复：为步骤提供 Token
         with:
           tag_name: ${{ github.event.inputs.tag }}
           release_name: Release ${{ github.event.inputs.tag }}
@@ -158,6 +160,8 @@ jobs:
 
       - name: Upload Linux Release Binary
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 修复：为步骤提供 Token
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux-amd64-release-binary/${{ needs.build-linux-release.outputs.project_name }}-linux-amd64
@@ -165,6 +169,8 @@ jobs:
 
       - name: Upload Linux Debug Binary
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 修复：为步骤提供 Token
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/linux-amd64-debug-binary/${{ needs.build-linux-release.outputs.project_name }}-debug-linux-amd64
@@ -172,6 +178,8 @@ jobs:
 
       - name: Upload Windows Release Binary
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 修复：为步骤提供 Token
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/windows-amd64-release-binary/${{ needs.build-linux-release.outputs.project_name }}.exe
@@ -179,6 +187,8 @@ jobs:
 
       - name: Upload Windows Debug Binary
         uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # 修复：为步骤提供 Token
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: artifacts/windows-amd64-debug-binary/${{ needs.build-linux-release.outputs.project_name }}.exe
