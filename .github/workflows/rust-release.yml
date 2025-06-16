@@ -1,0 +1,97 @@
+# .github/workflows/rust-release.yml
+
+name: Build and Release Rust Project
+
+# 该工作流使用 workflow_dispatch 手动触发
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要创建和发布的 Tag，例如 v1.0.0'
+        required: true
+        type: string
+
+# 设置环境变量，让 cargo 的输出带有颜色
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-release:
+    name: Build and Release
+    runs-on: ubuntu-latest
+    steps:
+      # 1. 检出你的代码
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. 从 Cargo.toml 中动态获取项目名称
+      # 这样就不需要在脚本里硬编码项目名了
+      - name: Get project name
+        id: get_project_name
+        run: |
+          echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
+
+      # 3. 使用 rust-musl-builder Docker 镜像进行构建
+      # 这个镜像包含了构建 x86_64-unknown-linux-musl target 所需的所有工具链
+      # 我们分别运行 release 和 debug 构建
+      - name: Build static binaries with Docker
+        run: |
+          echo "Building release and debug binaries for ${{ env.PROJECT_NAME }}..."
+          # 使用 --rm 会在容器退出后自动删除，-v 将当前目录挂载到容器的工作目录
+          docker run --rm -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder:latest cargo build --release
+          docker run --rm -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder:latest cargo build
+
+      # 4. 准备用于发布的构建产物
+      # 构建产物位于 target/x86_64-unknown-linux-musl/ 目录下
+      # 我们将它们移动到根目录并重命名，方便后续上传
+      - name: Prepare release artifacts
+        run: |
+          TARGET_DIR="target/x86_64-unknown-linux-musl"
+          echo "Preparing artifacts from ${TARGET_DIR}..."
+          # 将 release 版本二进制文件移动到工作区根目录，并命名为项目名
+          mv "${TARGET_DIR}/release/${{ env.PROJECT_NAME }}" "${{ github.workspace }}/${{ env.PROJECT_NAME }}"
+          # 将 debug 版本二进制文件移动到工作区根目录，并添加 -debug 后缀
+          mv "${TARGET_DIR}/debug/${{ env.PROJECT_NAME }}" "${{ github.workspace }}/${{ env.PROJECT_NAME }}-debug"
+          echo "Artifacts prepared:"
+          ls -l ${{ env.PROJECT_NAME }}*
+
+      # 5. 使用输入的 tag 创建 GitHub Release
+      - name: Create GitHub Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN 是由 GitHub 自动提供的
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          release_name: Release ${{ github.event.inputs.tag }}
+          body: |
+            ## Release Notes
+            - Statically linked Linux binaries (x86_64-musl).
+            - Includes both release and debug versions.
+          draft: false
+          prerelease: false
+
+      # 6. 上传 Release 版本的二进制文件
+      # 文件名就是你的项目名
+      - name: Upload Release Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ env.PROJECT_NAME }}
+          asset_name: ${{ env.PROJECT_NAME }} # 发布的文件名
+          asset_content_type: application/octet-stream
+
+      # 7. 上传 Debug 版本的二进制文件
+      # 文件名是你的项目名加上 -debug 后缀
+      - name: Upload Debug Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./${{ env.PROJECT_NAME }}-debug
+          asset_name: ${{ env.PROJECT_NAME }}-debug # 发布的文件名
+          asset_content_type: application/octet-stream
+
