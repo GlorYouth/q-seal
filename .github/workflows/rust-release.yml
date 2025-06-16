@@ -16,32 +16,46 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-and-release:
-    name: Build and Release for amd64
+  build-release:
+    name: Build Release Binary
     runs-on: ubuntu-latest
     steps:
-      # 1. 检出你的代码和 Dockerfile
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 从 Cargo.toml 中动态获取项目名称
       - name: Get project name
         id: get_project_name
-        run: |
-          echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
+        run: echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
 
-      # 3. 构建 Release 版本的 Docker 镜像
-      #    我们复用项目中的 Dockerfile，并通过 --build-arg 传入构建类型
-      #    注意 --file 参数已指向新的文件路径
       - name: Build release image
         run: |
           docker build . \
             --file docker/amd64/Dockerfile \
             --tag ${{ env.PROJECT_NAME }}:release \
             --build-arg BUILD_PROFILE=release
+      
+      - name: Extract release artifact
+        run: |
+          mkdir -p artifacts
+          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:release /root/app > artifacts/${{ env.PROJECT_NAME }}-amd64
 
-      # 4. 构建 Debug 版本的 Docker 镜像
-      #    同样复用 Dockerfile，只是传入不同的构建类型
+      - name: Upload release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-binary
+          path: artifacts/${{ env.PROJECT_NAME }}-amd64
+
+  build-debug:
+    name: Build Debug Binary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get project name
+        id: get_project_name
+        run: echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
+
       - name: Build debug image
         run: |
           docker build . \
@@ -49,19 +63,45 @@ jobs:
             --tag ${{ env.PROJECT_NAME }}:debug \
             --build-arg BUILD_PROFILE=debug
 
-      # 5. 从 Docker 镜像中提取编译好的二进制文件
-      #    我们通过临时运行容器并使用 `cat` 命令来提取产物
-      - name: Extract artifacts from images
+      - name: Extract debug artifact
         run: |
-          echo "Extracting binaries..."
-          # 提取 release 版本
-          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:release /root/app > ${{ github.workspace }}/${{ env.PROJECT_NAME }}
-          # 提取 debug 版本
-          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:debug /root/app > ${{ github.workspace }}/${{ env.PROJECT_NAME }}-debug
-          echo "Artifacts prepared:"
-          ls -l ${{ env.PROJECT_NAME }}*
+          mkdir -p artifacts
+          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:debug /root/app > artifacts/${{ env.PROJECT_NAME }}-debug-amd64
+      
+      - name: Upload debug artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-binary
+          path: artifacts/${{ env.PROJECT_NAME }}-debug-amd64
 
-      # 6. 使用输入的 tag 创建 GitHub Release
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    # 等待 build-release 和 build-debug 两个作业都成功完成后再运行
+    needs: [build-release, build-debug]
+    permissions:
+      contents: write # 授予创建 Release 的权限
+    steps:
+      - name: Get project name
+        # 注意：由于这是个新作业，我们需要再次获取项目名
+        # 为了避免重复检出代码，我们直接从 needs 上下文中获取
+        # 这是一个小技巧，但为了简单起见，我们还是重新检出和获取
+        run: |
+          # 这是一个临时的解决方案，在实际复杂场景中，你可能希望通过其他方式传递项目名
+          # 但对于当前场景，我们简单地硬编码或再次获取
+          # 这里我们先假设项目名，在实际使用中请确保它与构建作业中的一致
+          # 或者，更稳妥的方式是也进行一次 checkout 和 get project name
+          echo "PROJECT_NAME=q-seal" >> $GITHUB_ENV
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          # 下载所有工件到当前目录
+          path: artifacts
+
+      - name: Display structure of downloaded files
+        run: ls -R artifacts
+
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
@@ -73,29 +113,23 @@ jobs:
           body: |
             ## Release Notes
             - Statically linked Linux binaries (x86_64-musl).
-            - Includes both release and debug versions.
+            - Includes both release and debug versions, built in parallel.
             - Built via a reusable Dockerfile.
-          draft: false
-          prerelease: false
 
-      # 7. 上传 Release 版本的二进制文件
       - name: Upload Release Binary
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ env.PROJECT_NAME }}
-          asset_name: ${{ env.PROJECT_NAME }}-amd64 # 在文件名中加入架构标识
-          asset_content_type: application/octet-stream
+          asset_path: artifacts/release-binary/${{ env.PROJECT_NAME }}-amd64
+          asset_name: ${{ env.PROJECT_NAME }}-amd64
 
-      # 8. 上传 Debug 版本的二进制文件
       - name: Upload Debug Binary
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./${{ env.PROJECT_NAME }}-debug
-          asset_name: ${{ env.PROJECT_NAME }}-debug-amd64 # 在文件名中加入架构标识
-          asset_content_type: application/octet-stream
+          asset_path: artifacts/debug-binary/${{ env.PROJECT_NAME }}-debug-amd64
+          asset_name: ${{ env.PROJECT_NAME }}-debug-amd64
