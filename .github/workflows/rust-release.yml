@@ -37,8 +37,11 @@ jobs:
         run: |
           echo "Building static binaries for ${{ env.PROJECT_NAME }} using rust:alpine..."
           docker run --rm -v "$(pwd)":/usr/src/myapp -w /usr/src/myapp rust:alpine sh -c ' \
-            # 更新包列表并安装完整的构建工具链和 musl-dev
-            apk add --no-cache build-base musl-dev && \
+            # 更新包列表并安装完整的构建工具链、musl-dev 和 gcc
+            apk add --no-cache build-base musl-dev gcc && \
+            \
+            # 明确为 musl target 设置 C 编译器，解决 C 依赖的编译问题
+            export CC_x86_64_unknown_linux_musl=musl-gcc && \
             \
             # 添加 musl target
             rustup target add x86_64-unknown-linux-musl && \
@@ -47,7 +50,7 @@ jobs:
             cargo build --target x86_64-unknown-linux-musl --release && \
             \
             # 构建 debug 版本，指定 target
-            cargo build --target x86_64-unknown-linux-musl \
+            cargo build --target x86_64_unknown_linux_musl \
           '
 
       # 4. 准备用于发布的构建产物
@@ -104,4 +107,3 @@ jobs:
           asset_path: ./${{ env.PROJECT_NAME }}-debug
           asset_name: ${{ env.PROJECT_NAME }}-debug # 发布的文件名
           asset_content_type: application/octet-stream
-
