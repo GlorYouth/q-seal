@@ -1,6 +1,6 @@
 # .github/workflows/rust-release.yml
 
-name: Build and Release Rust Project via Dockerfile
+name: Build and Release Rust Project
 
 # 该工作流使用 workflow_dispatch 手动触发
 on:
@@ -16,37 +16,39 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build-release:
-    name: Build Release Binary
+  build-linux-release:
+    name: Build Linux Release (amd64)
     runs-on: ubuntu-latest
+    outputs:
+      project_name: ${{ steps.get_project_name.outputs.project_name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Get project name
         id: get_project_name
-        run: echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
+        run: echo "project_name=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_OUTPUT
 
       - name: Build release image
         run: |
           docker build . \
             --file docker/amd64/Dockerfile \
-            --tag ${{ env.PROJECT_NAME }}:release \
+            --tag ${{ steps.get_project_name.outputs.project_name }}:release \
             --build-arg BUILD_PROFILE=release
       
       - name: Extract release artifact
         run: |
           mkdir -p artifacts
-          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:release /root/app > artifacts/${{ env.PROJECT_NAME }}-amd64
+          docker run --rm --entrypoint cat ${{ steps.get_project_name.outputs.project_name }}:release /root/app > artifacts/${{ steps.get_project_name.outputs.project_name }}-linux-amd64
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:
-          name: release-binary
-          path: artifacts/${{ env.PROJECT_NAME }}-amd64
+          name: linux-amd64-release-binary
+          path: artifacts/${{ steps.get_project_name.outputs.project_name }}-linux-amd64
 
-  build-debug:
-    name: Build Debug Binary
+  build-linux-debug:
+    name: Build Linux Debug (amd64)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -54,49 +56,146 @@ jobs:
 
       - name: Get project name
         id: get_project_name
-        run: echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
+        run: echo "project_name=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_OUTPUT
 
       - name: Build debug image
         run: |
           docker build . \
             --file docker/amd64/Dockerfile \
-            --tag ${{ env.PROJECT_NAME }}:debug \
+            --tag ${{ steps.get_project_name.outputs.project_name }}:debug \
             --build-arg BUILD_PROFILE=debug
 
       - name: Extract debug artifact
         run: |
           mkdir -p artifacts
-          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:debug /root/app > artifacts/${{ env.PROJECT_NAME }}-debug-amd64
+          docker run --rm --entrypoint cat ${{ steps.get_project_name.outputs.project_name }}:debug /root/app > artifacts/${{ steps.get_project_name.outputs.project_name }}-debug-linux-amd64
       
       - name: Upload debug artifact
         uses: actions/upload-artifact@v4
         with:
-          name: debug-binary
-          path: artifacts/${{ env.PROJECT_NAME }}-debug-amd64
+          name: linux-amd64-debug-binary
+          path: artifacts/${{ steps.get_project_name.outputs.project_name }}-debug-linux-amd64
 
+  build-windows-amd64-release:
+    name: Build Windows Release (amd64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Get project name
+        id: get_project_name
+        run: |
+          $projectName = (Get-Content Cargo.toml | Select-String -Pattern '^name' | Select-Object -First 1).Line -replace 'name = "', '' -replace '"', ''
+          echo "project_name=$projectName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Build with cargo
+        run: cargo build --release
+        shell: cmd
+        
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64-release-binary
+          path: target/release/${{ steps.get_project_name.outputs.project_name }}.exe
+
+  build-windows-amd64-debug:
+    name: Build Windows Debug (amd64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Get project name
+        id: get_project_name
+        run: |
+          $projectName = (Get-Content Cargo.toml | Select-String -Pattern '^name' | Select-Object -First 1).Line -replace 'name = "', '' -replace '"', ''
+          echo "project_name=$projectName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Build with cargo
+        run: cargo build
+        shell: cmd
+        
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64-debug-binary
+          path: target/debug/${{ steps.get_project_name.outputs.project_name }}.exe
+
+  build-windows-arm64-release:
+    name: Build Windows Release (arm64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get project name
+        id: get_project_name
+        run: |
+          $projectName = (Get-Content Cargo.toml | Select-String -Pattern '^name' | Select-Object -First 1).Line -replace 'name = "', '' -replace '"', ''
+          echo "project_name=$projectName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+      
+      - name: Install Rust aarch64 target
+        run: rustup target add aarch64-pc-windows-msvc
+        shell: cmd
+
+      - name: Build with cargo for ARM64
+        run: cargo build --target aarch64-pc-windows-msvc --release
+        shell: cmd
+        
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm64-release-binary
+          path: target/aarch64-pc-windows-msvc/release/${{ steps.get_project_name.outputs.project_name }}.exe
+
+  build-windows-arm64-debug:
+    name: Build Windows Debug (arm64)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get project name
+        id: get_project_name
+        run: |
+          $projectName = (Get-Content Cargo.toml | Select-String -Pattern '^name' | Select-Object -First 1).Line -replace 'name = "', '' -replace '"', ''
+          echo "project_name=$projectName" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+      
+      - name: Install Rust aarch64 target
+        run: rustup target add aarch64-pc-windows-msvc
+        shell: cmd
+
+      - name: Build with cargo for ARM64
+        run: cargo build --target aarch64-pc-windows-msvc
+        shell: cmd
+        
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-arm64-debug-binary
+          path: target/aarch64-pc-windows-msvc/debug/${{ steps.get_project_name.outputs.project_name }}.exe
+          
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    # 等待 build-release 和 build-debug 两个作业都成功完成后再运行
-    needs: [build-release, build-debug]
+    needs: 
+      - build-linux-release
+      - build-linux-debug
+      - build-windows-amd64-release
+      - build-windows-amd64-debug
+      - build-windows-arm64-release
+      - build-windows-arm64-debug
     permissions:
-      contents: write # 授予创建 Release 的权限
+      contents: write
     steps:
-      - name: Get project name
-        # 注意：由于这是个新作业，我们需要再次获取项目名
-        # 为了避免重复检出代码，我们直接从 needs 上下文中获取
-        # 这是一个小技巧，但为了简单起见，我们还是重新检出和获取
-        run: |
-          # 这是一个临时的解决方案，在实际复杂场景中，你可能希望通过其他方式传递项目名
-          # 但对于当前场景，我们简单地硬编码或再次获取
-          # 这里我们先假设项目名，在实际使用中请确保它与构建作业中的一致
-          # 或者，更稳妥的方式是也进行一次 checkout 和 get project name
-          echo "PROJECT_NAME=q-seal" >> $GITHUB_ENV
-
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          # 下载所有工件到当前目录
           path: artifacts
 
       - name: Display structure of downloaded files
@@ -105,31 +204,26 @@ jobs:
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.event.inputs.tag }}
           release_name: Release ${{ github.event.inputs.tag }}
           body: |
             ## Release Notes
             - Statically linked Linux binaries (x86_64-musl).
+            - Windows binaries (x86_64 & aarch64).
             - Includes both release and debug versions, built in parallel.
-            - Built via a reusable Dockerfile.
+            - Linux version built via a reusable Dockerfile.
 
-      - name: Upload Release Binary
-        uses: actions/upload-release-asset@v1
+      - name: Upload Assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/release-binary/${{ env.PROJECT_NAME }}-amd64
-          asset_name: ${{ env.PROJECT_NAME }}-amd64
-
-      - name: Upload Debug Binary
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: artifacts/debug-binary/${{ env.PROJECT_NAME }}-debug-amd64
-          asset_name: ${{ env.PROJECT_NAME }}-debug-amd64
+        run: |
+          PROJECT_NAME="${{ needs.build-linux-release.outputs.project_name }}"
+          UPLOAD_URL="${{ steps.create_release.outputs.upload_url }}"
+          
+          gh release upload ${{ github.event.inputs.tag }} artifacts/linux-amd64-release-binary/$PROJECT_NAME-linux-amd64 --clobber
+          gh release upload ${{ github.event.inputs.tag }} artifacts/linux-amd64-debug-binary/$PROJECT_NAME-debug-linux-amd64 --clobber
+          gh release upload ${{ github.event.inputs.tag }} artifacts/windows-amd64-release-binary/$PROJECT_NAME.exe --clobber --name "$PROJECT_NAME-windows-amd64.exe"
+          gh release upload ${{ github.event.inputs.tag }} artifacts/windows-amd64-debug-binary/$PROJECT_NAME.exe --clobber --name "$PROJECT_NAME-debug-windows-amd64.exe"
+          gh release upload ${{ github.event.inputs.tag }} artifacts/windows-arm64-release-binary/$PROJECT_NAME.exe --clobber --name "$PROJECT_NAME-windows-arm64.exe"
+          gh release upload ${{ github.event.inputs.tag }} artifacts/windows-arm64-debug-binary/$PROJECT_NAME.exe --clobber --name "$PROJECT_NAME-debug-windows-arm64.exe"
