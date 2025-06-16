@@ -24,7 +24,7 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
-[profile.debug]
+[profile.dev]
 opt-level = 3
 lto = "fat"
 codegen-units = 1
