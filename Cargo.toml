@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 q-seal-core = { path = "core" }
 rand = "0.9.1"
-serde = { version = "1.0.219", features = ["derive"] }
 rsa = "0.9.8"
 rand_core = "0.9.3"
 clap = { version = "4.5.4", features = ["derive"] }
@@ -32,4 +31,4 @@ strip = true
 
 [dev-dependencies]
 assert_cmd = "2.0"
-predicates = "2.1"
+predicates = "3.1.3"
