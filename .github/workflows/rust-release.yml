@@ -32,13 +32,13 @@ jobs:
           echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
 
       # 3. 使用官方 rust:alpine 镜像进行构建
-      # 我们需要手动安装 musl 工具链并添加 musl target
+      # 我们需要手动安装 musl 工具链和完整的构建工具链 (build-base)
       - name: Build static binaries with rust:alpine
         run: |
           echo "Building static binaries for ${{ env.PROJECT_NAME }} using rust:alpine..."
           docker run --rm -v "$(pwd)":/usr/src/myapp -w /usr/src/myapp rust:alpine sh -c ' \
-            # 更新包列表并安装 musl 工具链和 gcc
-            apk add --no-cache musl-dev gcc && \
+            # 更新包列表并安装完整的构建工具链和 musl-dev
+            apk add --no-cache build-base musl-dev && \
             \
             # 添加 musl target
             rustup target add x86_64-unknown-linux-musl && \
