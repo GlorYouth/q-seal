@@ -1,6 +1,6 @@
 # .github/workflows/rust-release.yml
 
-name: Build and Release Rust Project
+name: Build and Release Rust Project via Dockerfile
 
 # 该工作流使用 workflow_dispatch 手动触发
 on:
@@ -17,62 +17,56 @@ env:
 
 jobs:
   build-and-release:
-    name: Build and Release
+    name: Build and Release for amd64
     runs-on: ubuntu-latest
     steps:
-      # 1. 检出你的代码
+      # 1. 检出你的代码和 Dockerfile
       - name: Checkout code
         uses: actions/checkout@v4
 
       # 2. 从 Cargo.toml 中动态获取项目名称
-      # 这样就不需要在脚本里硬编码项目名了
       - name: Get project name
         id: get_project_name
         run: |
           echo "PROJECT_NAME=$(grep '^name' Cargo.toml | head -n 1 | sed -e 's/name = "//' -e 's/"//')" >> $GITHUB_ENV
 
-      # 3. 使用官方 rust:alpine 镜像进行构建
-      # 我们需要手动安装 musl 工具链和完整的构建工具链 (build-base)
-      - name: Build static binaries with rust:alpine
+      # 3. 构建 Release 版本的 Docker 镜像
+      #    我们复用项目中的 Dockerfile，并通过 --build-arg 传入构建类型
+      #    注意 --file 参数已指向新的文件路径
+      - name: Build release image
         run: |
-          echo "Building static binaries for ${{ env.PROJECT_NAME }} using rust:alpine..."
-          docker run --rm -v "$(pwd)":/usr/src/myapp -w /usr/src/myapp rust:alpine sh -c ' \
-            # 更新包列表并安装完整的构建工具链、musl-dev 和 gcc
-            apk add --no-cache build-base musl-dev gcc && \
-            \
-            # 明确为 musl target 设置 C 编译器，解决 C 依赖的编译问题
-            export CC_x86_64_unknown_linux_musl=musl-gcc && \
-            \
-            # 添加 musl target
-            rustup target add x86_64-unknown-linux-musl && \
-            \
-            # 构建 release 版本，指定 target
-            cargo build --target x86_64-unknown-linux-musl --release && \
-            \
-            # 构建 debug 版本，指定 target
-            cargo build --target x86_64_unknown_linux_musl \
-          '
+          docker build . \
+            --file docker/amd64/Dockerfile \
+            --tag ${{ env.PROJECT_NAME }}:release \
+            --build-arg BUILD_PROFILE=release
 
-      # 4. 准备用于发布的构建产物
-      # 构建产物位于 target/x86_64-unknown-linux-musl/ 目录下
-      # 我们将它们移动到根目录并重命名，方便后续上传
-      - name: Prepare release artifacts
+      # 4. 构建 Debug 版本的 Docker 镜像
+      #    同样复用 Dockerfile，只是传入不同的构建类型
+      - name: Build debug image
         run: |
-          TARGET_DIR="target/x86_64-unknown-linux-musl"
-          echo "Preparing artifacts from ${TARGET_DIR}..."
-          # 将 release 版本二进制文件移动到工作区根目录，并命名为项目名
-          mv "${TARGET_DIR}/release/${{ env.PROJECT_NAME }}" "${{ github.workspace }}/${{ env.PROJECT_NAME }}"
-          # 将 debug 版本二进制文件移动到工作区根目录，并添加 -debug 后缀
-          mv "${TARGET_DIR}/debug/${{ env.PROJECT_NAME }}" "${{ github.workspace }}/${{ env.PROJECT_NAME }}-debug"
+          docker build . \
+            --file docker/amd64/Dockerfile \
+            --tag ${{ env.PROJECT_NAME }}:debug \
+            --build-arg BUILD_PROFILE=debug
+
+      # 5. 从 Docker 镜像中提取编译好的二进制文件
+      #    我们通过临时运行容器并使用 `cat` 命令来提取产物
+      - name: Extract artifacts from images
+        run: |
+          echo "Extracting binaries..."
+          # 提取 release 版本
+          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:release /root/app > ${{ github.workspace }}/${{ env.PROJECT_NAME }}
+          # 提取 debug 版本
+          docker run --rm --entrypoint cat ${{ env.PROJECT_NAME }}:debug /root/app > ${{ github.workspace }}/${{ env.PROJECT_NAME }}-debug
           echo "Artifacts prepared:"
           ls -l ${{ env.PROJECT_NAME }}*
 
-      # 5. 使用输入的 tag 创建 GitHub Release
+      # 6. 使用输入的 tag 创建 GitHub Release
       - name: Create GitHub Release
         id: create_release
         uses: actions/create-release@v1
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # GITHUB_TOKEN 是由 GitHub 自动提供的
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ github.event.inputs.tag }}
           release_name: Release ${{ github.event.inputs.tag }}
@@ -80,12 +74,11 @@ jobs:
             ## Release Notes
             - Statically linked Linux binaries (x86_64-musl).
             - Includes both release and debug versions.
-            - Built with official rust:alpine image.
+            - Built via a reusable Dockerfile.
           draft: false
           prerelease: false
 
-      # 6. 上传 Release 版本的二进制文件
-      # 文件名就是你的项目名
+      # 7. 上传 Release 版本的二进制文件
       - name: Upload Release Binary
         uses: actions/upload-release-asset@v1
         env:
@@ -93,11 +86,10 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./${{ env.PROJECT_NAME }}
-          asset_name: ${{ env.PROJECT_NAME }} # 发布的文件名
+          asset_name: ${{ env.PROJECT_NAME }}-amd64 # 在文件名中加入架构标识
           asset_content_type: application/octet-stream
 
-      # 7. 上传 Debug 版本的二进制文件
-      # 文件名是你的项目名加上 -debug 后缀
+      # 8. 上传 Debug 版本的二进制文件
       - name: Upload Debug Binary
         uses: actions/upload-release-asset@v1
         env:
@@ -105,5 +97,5 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ./${{ env.PROJECT_NAME }}-debug
-          asset_name: ${{ env.PROJECT_NAME }}-debug # 发布的文件名
+          asset_name: ${{ env.PROJECT_NAME }}-debug-amd64 # 在文件名中加入架构标识
           asset_content_type: application/octet-stream
